@@ -268,8 +268,23 @@
 (defn reduce-v1-frame [[_ vt] [delay str]]
   [delay (vt/feed-str vt str)])
 
+(defn join-short-frames [coll]
+  (let [min-frame-length (/ 1.0 30)]
+    (loop [acc-delay 0.0
+           acc-data ""
+           coll coll
+           out []]
+      (if (seq coll)
+        (let [[delay data] (first coll)
+              sum (+ acc-delay delay)]
+          (if (or (<= sum min-frame-length) (= acc-data ""))
+            (recur sum (.concat acc-data data) (rest coll) out)
+            (recur delay data (rest coll) (conj out [acc-delay acc-data]))))
+        (conj out [acc-delay acc-data])))))
+
 (defn build-v1-frames [{:keys [stdout width height]}]
-  (let [vt (vt/make-vt width height)]
+  (let [vt (vt/make-vt width height)
+        stdout (join-short-frames stdout)]
     (reductions reduce-v1-frame [0 vt] stdout)))
 
 (defn vt->frame
