@@ -56,12 +56,14 @@
                            :origin-mode false
                            :auto-wrap-mode true})
 
+(declare ground)
+
 (defn make-vt [width height]
   {:width width
    :height height
    :top-margin 0
    :bottom-margin (dec height)
-   :parser {:state :ground
+   :parser {:state ground
             :intermediate-chars []
             :param-chars []}
    :tabs (default-tabs width)
@@ -696,6 +698,203 @@
                      (events 0x9D) {:transition :osc-string}
                      (events 0x9B) {:transition :csi-entry}})
 
+(defn transition [new-state]
+  (fn [vt]
+    (assoc-in vt [:parser :state] new-state)))
+
+(declare ground escape escape-intermediate csi-entry csi-param csi-intermediate csi-ignore dcs-entry dcs-param dcs-intermediate dcs-passthrough dcs-ignore osc-string sos-pm-apc-string)
+
+(def ->ground (transition ground))
+
+(def ->escape (comp clear (transition escape)))
+(def ->escape-intermediate (transition escape-intermediate))
+
+(def ->csi-entry (comp clear (transition csi-entry)))
+(def ->csi-param (transition csi-param))
+(def ->csi-intermediate (transition csi-intermediate))
+(def ->csi-ignore (transition csi-ignore))
+
+(def ->dcs-entry (comp clear (transition dcs-entry)))
+(def ->dcs-param (transition dcs-param))
+(def ->dcs-intermediate (transition dcs-intermediate))
+(def ->dcs-passthrough (transition dcs-passthrough))
+(def ->dcs-ignore (transition dcs-ignore))
+
+(def ->osc-string (transition osc-string))
+
+(def ->sos-pm-apc-string (transition sos-pm-apc-string))
+
+(def a (events 0x18 0x1A :0x80-0x8F :0x91-0x97 0x99 0x9A))
+(def b (events 0x9C))
+(def c (events 0x1B))
+(def d (events 0x98 0x9E 0x9F))
+(def e (events 0x90))
+(def f (events 0x9D))
+(def g (events 0x9B))
+
+(defn anywhere [vt input]
+  (condp contains? input
+    a (-> vt (execute input) ->ground)
+    b (->ground vt)
+    c (->escape vt)
+    d (->sos-pm-apc-string vt)
+    e (->dcs-entry vt)
+    f (->osc-string vt)
+    g (->csi-entry vt)
+    nil))
+
+(def h (events :0x20-0x7F :0xA0-0xFF))
+
+(defn ground [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (execute vt input)
+        h (print vt input))))
+
+(def i (events :0x20-0x2F))
+(def j (events :0x30-0x4F :0x51-0x57 0x59 0x5A 0x5C :0x60-0x7E))
+(def k (events 0x5B))
+(def l (events 0x5D))
+(def m (events 0x50))
+(def n (events 0x58 0x5E 0x5F))
+(def o (events 0x7f))
+
+(defn escape [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (execute vt input)
+        i (-> vt (collect input) ->escape-intermediate)
+        j (-> vt (esc-dispatch input) ->ground)
+        k (->csi-entry vt)
+        l (->osc-string vt)
+        m (->dcs-entry vt)
+        n (->sos-pm-apc-string vt)
+        o (ignore vt input))))
+
+(def aa (events :0x20-0x2F))
+(def ab (events :0x30-0x7E))
+(def ac (events 0x7f))
+
+(defn escape-intermediate [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (execute vt input)
+        aa (collect vt input)
+        ab (-> vt (esc-dispatch input) ->ground)
+        ac (ignore vt input))))
+
+(def ad (events :0x40-0x7E))
+(def ae (events :0x30-0x39 0x3B))
+(def af (events :0x3C-0x3F))
+(def ag (events 0x3A))
+(def ah (events :0x20-0x2F))
+(def ai (events 0x7f))
+
+(defn csi-entry [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (execute vt input)
+        ad (-> vt (csi-dispatch input) ->ground)
+        ae (-> vt (param input) ->csi-param)
+        af (-> vt (collect input) ->csi-param)
+        ag (->csi-ignore vt)
+        ah (-> vt (collect input) ->csi-intermediate)
+        ai (ignore vt input))))
+
+(def ba (events :0x30-0x39 0x3B))
+(def bb (events 0x3A :0x3C-0x3F))
+(def bc (events :0x20-0x2F))
+(def bd (events :0x40-0x7E))
+(def be (events 0x7f))
+
+(defn csi-param [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (execute vt input)
+        ba (param vt input)
+        bb (->csi-ignore vt)
+        bc (-> vt (collect input) ->csi-intermediate)
+        bd (-> vt (csi-dispatch input) ->ground)
+        be (ignore vt input))))
+
+(def ca (events :0x20-0x2F))
+(def cb (events :0x40-0x7E))
+(def cc (events :0x30-0x3F))
+(def cd (events 0x7f))
+
+(defn csi-intermediate [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (execute vt input)
+        ca (collect vt input)
+        cb (-> vt (csi-dispatch input) ->ground)
+        cc (->csi-ignore vt)
+        cd (ignore vt input))))
+
+(defn csi-ignore [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (execute vt input)
+        (events :0x20-0x3F) (ignore vt input)
+        (events :0x40-0x7E) (->ground vt)
+        (events 0x7f) (ignore vt input))))
+
+(defn dcs-entry [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (ignore vt input)
+        (events :0x20-0x2F) (-> vt (collect input) ->dcs-intermediate)
+        (events 0x3A) (->dcs-ignore vt)
+        (events :0x30-0x39 0x3B) (-> vt (param input) ->dcs-param)
+        (events :0x3C-0x3F) (-> vt (collect input) ->dcs-param)
+        (events :0x40-0x7E) (->dcs-passthrough vt)
+        (events 0x7f) (ignore vt input))))
+
+(defn dcs-param [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (ignore vt input)
+        (events :0x20-0x2F) (-> vt (collect input) ->dcs-intermediate)
+        (events :0x30-0x39 0x3B) (param vt input)
+        (events 0x3A :0x3C-0x3F) (->dcs-ignore vt)
+        (events :0x40-0x7E) (->dcs-passthrough vt)
+        (events 0x7f) (ignore vt input))))
+
+(defn dcs-intermediate [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (ignore vt input)
+        (events :0x20-0x2F) (collect vt input)
+        (events :0x30-0x3F) (->dcs-ignore vt)
+        (events :0x40-0x7E) (->dcs-passthrough vt)
+        (events 0x7f) (ignore vt input))))
+
+(defn dcs-passthrough [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (put vt input)
+        (events :0x20-0x7E) (put vt input)
+        (events 0x7f) (ignore vt input))))
+
+(defn dcs-ignore [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (ignore vt input)
+        (events :0x20-0x7f) (ignore vt input))))
+
+(defn osc-string [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        (disj c0-prime? 0x07) (ignore vt input)
+        (events :0x20-0x7F) (osc-put vt input)
+        (events 0x07) (->ground vt)))) ; 0x07 is xterm non-ANSI variant of transition to :ground
+
+(defn sos-pm-apc-string [vt input]
+  (or (anywhere vt input)
+      (condp contains? input
+        c0-prime? (ignore vt input)
+        (events :0x20-0x7F) (ignore vt input))))
+
 (def states {
   :ground {
     c0-prime? {:action execute}
@@ -801,7 +1000,7 @@
 (defn- get-transition [rules input]
   (some (fn [[pred cfg]] (when (pred input) cfg)) rules))
 
-(def parse (memoize (fn [current-state input]
+(defn parse [current-state input]
   (let [current-state-cfg (get states current-state)
         transition (or (get-transition anywhere-state input)
                        (get-transition current-state-cfg (if (>= input 0xa0) 0x41 input)))
@@ -812,16 +1011,19 @@
             entry-action (:on-enter new-state-cfg)
             actions (remove nil? [exit-action transition-action entry-action])]
         [new-state actions])
-      [current-state (if transition-action [transition-action] [])])))))
+      [current-state (if transition-action [transition-action] [])])))
 
 (defn execute-actions [vt actions input]
   (reduce (fn [vt f] (f vt input)) vt actions))
 
+;; (defn feed-one [{{old-state :state} :parser :as vt} input]
+;;   (let [[new-state actions] (parse old-state input)]
+;;     (-> vt
+;;         (assoc-in [:parser :state] new-state)
+;;         (execute-actions actions input))))
+
 (defn feed-one [{{old-state :state} :parser :as vt} input]
-  (let [[new-state actions] (parse old-state input)]
-    (-> vt
-        (assoc-in [:parser :state] new-state)
-        (execute-actions actions input))))
+  (old-state vt input))
 
 (defn feed [vt inputs]
   (reduce feed-one vt inputs))
