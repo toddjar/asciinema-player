@@ -5,7 +5,9 @@
             [schema.core :as s]
             [asciinema.player.format.asciicast-v0 :as v0]
             [asciinema.player.format.asciicast-v1 :as v1]
+            [asciinema.player.frames :as f]
             [asciinema.player.vt :as vt]
+            [asciinema.player.actions :as a]
             [asciinema.player.util :as util]
             [asciinema.player.patch :refer [js->clj]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
@@ -24,16 +26,6 @@
     (or type :asciicast)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn screen-state-at
-  "Returns screen state (lines + cursor) at given time (in seconds)."
-  [screen-frames seconds]
-  (last (last (take-while #(<= (first %) seconds) screen-frames))))
-
-(defn drop-frames
-  "Returns sequence of frames starting at given time (in seconds)."
-  [frames seconds]
-  (drop-while #(< (first %) seconds) frames))
 
 (defmulti initialize-asciicast
   "Given fetched asciicast extracts width, height and frames into a map."
@@ -54,16 +46,14 @@
 (defn time-frames
   "Returns infinite seq of time frames."
   []
-  (iterate (fn [[a b]]
-             [(inc a) (inc b)])
-           [0 0]))
+  (iterate (fn [[a _]]
+             [(inc a) (inc a)])
+           [0 0])) ; TODO use f/frame constructor
 
-(defn frames-at-speed
-  "Alters time of each frame to match given speed."
-  [frames speed]
-  (map (fn [[time data]]
-         (vector (/ time speed) data))
-       frames))
+(defn screen-at
+  "Returns screen state (lines + cursor) at given time (in seconds)."
+  [seconds screen-frames]
+  (last (f/frame-at seconds screen-frames)))
 
 (defn lazy-promise-chan
   "Returns a function f returning a promise channel. The calculation of the
@@ -100,8 +90,8 @@
   [{:keys [recording-ch-fn]} events-ch]
   (go
     (let [{:keys [duration width height]} (<! (@recording-ch-fn false))]
-      (>! events-ch [:duration duration])
-      (>! events-ch [:size width height]))))
+      (>! events-ch (a/->SetDuration duration))
+      (>! events-ch (a/->Resize width height)))))
 
 (defn show-poster
   "Forces loading of recording and sends 'poster' at a given time to the
@@ -109,64 +99,70 @@
   [{:keys [recording-ch-fn]} time events-ch]
   (go
     (let [{:keys [frames]} (<! (@recording-ch-fn true))]
-      (>! events-ch [:screen (screen-state-at frames time)]))))
+      (>! events-ch (a/->UpdateScreen (screen-at time frames))))))
 
 (defn show-loading
   "Reports 'loading' to the player until the recording is loaded."
   [{:keys [recording-ch-fn]} events-ch]
   (when-not (poll! (@recording-ch-fn false))
     (go
-      (>! events-ch [:loading true])
+      (>! events-ch (a/->SetLoading true))
       (<! (@recording-ch-fn false))
-      (>! events-ch [:loading false]))))
+      (>! events-ch (a/->SetLoading false)))))
 
-(defn emit-events
+(defn emit-coll
   "Starts sending frames as events with a given name, stopping when stop-ch
   closes."
-  [event-name coll start-at events-ch stop-ch]
-  (let [elapsed-time (util/timer)]
+  [coll]
+  (let [out-ch (chan)]
     (go
-      (loop [coll coll
-             wall-time (elapsed-time)]
-        (if-let [[time data] (first coll)]
-          (let [ahead (- time start-at wall-time)]
-            (if (pos? ahead)
-              (let [timeout-ch (timeout (* 1000 ahead))
-                    [_ c] (alts! [stop-ch timeout-ch] :priority true)]
-                (when (= c timeout-ch)
-                  (do
-                    (>! events-ch [event-name data])
-                    (recur (rest coll) (elapsed-time)))))
-              (do
-                (>! events-ch [event-name data])
-                (recur (rest coll) wall-time)))))))))
+      (let [elapsed-time (util/timer)]
+        (loop [coll coll
+               wall-time (elapsed-time)]
+          (if-let [[time data] (first coll)]
+            (let [ahead (- time wall-time)]
+              (if (pos? ahead)
+                (let [timeout-ch (timeout (* 1000 ahead))]
+                  (<! timeout-ch)
+                  (when (>! out-ch data)
+                    (recur (rest coll) (elapsed-time))))
+                (when (>! out-ch data)
+                  (recur (rest coll) wall-time))))
+            (close! out-ch)))))
+    out-ch))
+
+(defn looped-pass [events-ch frames start-at speed loop? stop-ch]
+  (go
+    (loop [start-at start-at
+           sub-ch (emit-coll (f/frames-for-playback start-at speed frames))
+           elapsed-time (util/timer speed)]
+      (let [[v c] (alts! [sub-ch stop-ch])]
+        (condp = c
+          sub-ch (if v
+                   (do
+                     (>! events-ch v)
+                     (recur start-at sub-ch elapsed-time))
+                   (if loop?
+                     (recur 0 (emit-coll (f/frames-for-playback 0 speed frames)) (util/timer speed))
+                     nil))
+          stop-ch (do
+                    (close! sub-ch)
+                    (+ start-at (elapsed-time))))))))
 
 (defn play!
   "Starts emitting :time and :frame events with given start position and speed.
   Stops when stop-ch closes. Returns a channel to which stop position is
   eventually delivered."
-  [events-ch frames duration stop-ch start-at speed loop?]
+  [events-ch frames duration start-at speed loop? stop-ch]
   (go
-    (>! events-ch [:playing true])
-    (loop [start-at start-at]
-      (let [elapsed-time (util/timer speed)
-            sfs (-> frames (drop-frames start-at) (frames-at-speed speed))
-            tfs (-> (time-frames) (drop-frames start-at) (frames-at-speed speed))
-            local-stop-ch (chan)
-            done-ch (emit-events :screen sfs (/ start-at speed) events-ch local-stop-ch)
-            _ (emit-events :time tfs (/ start-at speed) events-ch local-stop-ch)
-            [_ c] (alts! [done-ch stop-ch])]
-        (close! local-stop-ch)
-        (if (= c done-ch)
-          (if loop?
-            (recur 0)
-            (do
-              (>! events-ch [:time duration])
-              (>! events-ch [:playing false])
-              0))
-          (do
-            (>! events-ch [:playing false])
-            (+ start-at (elapsed-time))))))))
+    (>! events-ch (a/->SetPlaying true))
+    (let [screen-frames (f/map-frame-data a/->UpdateScreen frames)
+          time-frames (f/map-frame-data a/->UpdateTime (time-frames))
+          frames (f/interleave-frames screen-frames time-frames)
+          stopped-at (<! (looped-pass events-ch frames start-at speed loop? stop-ch))]
+      (>! events-ch (a/->UpdateTime (or stopped-at duration)))
+      (>! events-ch (a/->SetPlaying false))
+      stopped-at)))
 
 (defn start-event-loop!
   "Main event loop of the PrerecordedSource."
@@ -187,7 +183,7 @@
                      (show-loading source events-ch)
                      (let [{:keys [frames duration]} (<! (@recording-ch-fn true))
                            stop-ch (chan)
-                           end-ch (play! events-ch frames duration stop-ch start-at speed loop?)]
+                           end-ch (play! events-ch frames duration start-at speed loop? stop-ch)]
                        (recur nil speed end-ch stop-ch))))
           :stop (if stop-ch
                   (do
@@ -212,8 +208,8 @@
           :internal/rewind (recur 0 speed nil nil)
           :internal/seek (let [start-at arg
                                {:keys [frames]} (<! (@recording-ch-fn true))]
-                           (>! events-ch [:time start-at])
-                           (>! events-ch [:screen (screen-state-at frames start-at)])
+                           (>! events-ch (a/->UpdateTime start-at))
+                           (>! events-ch (a/->UpdateScreen (screen-at start-at frames)))
                            (recur start-at speed end-ch stop-ch)))))
     command-ch))
 
