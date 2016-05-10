@@ -131,7 +131,7 @@
             (close! out-ch)))))
     out-ch))
 
-(defn looped-pass [events-ch frames start-at speed loop? stop-ch]
+(defn play-frames [events-ch frames start-at speed loop? stop-ch]
   (go
     (loop [start-at start-at
            sub-ch (emit-coll (f/frames-for-playback start-at speed frames))
@@ -159,7 +159,7 @@
     (let [screen-frames (f/map-frame-data a/->UpdateScreen frames)
           time-frames (f/map-frame-data a/->UpdateTime (time-frames))
           frames (f/interleave-frames screen-frames time-frames)
-          stopped-at (<! (looped-pass events-ch frames start-at speed loop? stop-ch))]
+          stopped-at (<! (play-frames events-ch frames start-at speed loop? stop-ch))]
       (>! events-ch (a/->UpdateTime (or stopped-at duration)))
       (>! events-ch (a/->SetPlaying false))
       stopped-at)))
