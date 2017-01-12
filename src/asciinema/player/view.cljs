@@ -361,6 +361,19 @@
        {:display-name "asciinema-player"
         :reagent-render #(player* player ui-ch mouse-moves-ch)
         :component-did-mount (fn [this]
+                               (js/setInterval
+                                (fn []
+                                  (let [player (-> js/document (.getElementsByClassName "asciinema-player") (aget 0))
+                                        terminal (-> js/document (.getElementsByClassName "asciinema-terminal") (aget 0))
+                                        player-width (.-offsetWidth player)
+                                        terminal-width (.-offsetWidth terminal)
+                                        terminal-height (.-offsetHeight terminal)
+                                        scale (/ player-width terminal-width)
+                                        transform (str "scale(" scale ")")
+                                        new-player-height (str (+ 33 (* terminal-height scale)) "px")]
+                                    (set! (-> terminal .-style .-transform) transform)
+                                    (set! (-> player .-style .-height) new-player-height)))
+                                1000)
                                (let [source-ch (source/init (:source @player))
                                      user-activity-ch (activity-chan mouse-moves-ch 3000 (chan 1 (map m/->ShowHud)))]
                                  (pipe user-activity-ch ui-ch)
