@@ -121,7 +121,7 @@
         style (reaction (terminal-style @width @height @font-size))]
     (fn []
       (let [{cursor-x :x cursor-y :y cursor-visible :visible} (screen/cursor @screen)]
-        [:pre.asciinema-terminal
+        [:pre.asciinema-terminal.real
          {:class-name @class-name :style @style}
          (map-indexed (fn [idx parts]
                         (let [cursor-x (when (and cursor-visible (= idx cursor-y)) cursor-x)
@@ -347,6 +347,7 @@
                                       :on-mouse-move on-mouse-move
                                       :class-name @wrapper-class-name}
        [:div.asciinema-player {:class-name @player-class-name}
+        [:pre.asciinema-terminal.ghost.font-small {:style {:width (str @width "ch") :height (str (* 1.3333333333 @height) "em") :position "absolute" :z-index -1}}]
         [terminal width height font-size screen cursor-on]
         [recorded-control-bar playing current-time total-time ui-ch]
         (when (or title author) [title-bar title author author-url author-img-url])
@@ -364,15 +365,13 @@
                                (js/setInterval
                                 (fn []
                                   (let [player (-> js/document (.getElementsByClassName "asciinema-player") (aget 0))
-                                        terminal (-> js/document (.getElementsByClassName "asciinema-terminal") (aget 0))
+                                        real-terminal (-> js/document (.getElementsByClassName "real") (aget 0))
+                                        ghost-terminal (-> js/document (.getElementsByClassName "ghost") (aget 0))
                                         player-width (.-offsetWidth player)
-                                        terminal-width (.-offsetWidth terminal)
-                                        terminal-height (.-offsetHeight terminal)
-                                        scale (/ player-width terminal-width)
-                                        transform (str "scale(" scale ")")
-                                        new-player-height (str (+ 33 (* terminal-height scale)) "px")]
-                                    (set! (-> terminal .-style .-transform) transform)
-                                    (set! (-> player .-style .-height) new-player-height)))
+                                        terminal-width (.-offsetWidth ghost-terminal)
+                                        zoom (/ player-width terminal-width)]
+                                    (.log js/console terminal-width)
+                                    (set! (-> real-terminal .-style .-zoom) zoom)))
                                 1000)
                                (let [source-ch (source/init (:source @player))
                                      user-activity-ch (activity-chan mouse-moves-ch 3000 (chan 1 (map m/->ShowHud)))]
