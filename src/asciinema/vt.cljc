@@ -1,12 +1,12 @@
 (ns asciinema.vt
   (:refer-clojure :exclude [print])
-  #?(:cljs (:require-macros [asciinema.vt-macros :refer [build-lookup-table]]))
+  #?(:cljs (:require-macros [asciinema.vt-macros :refer [build-lookup-table update!]]))
   (:require [asciinema.vt.screen :as screen]
             [asciinema.player.util :refer [adjust-to-range]]
             [schema.core :as s #?@(:cljs [:include-macros true])]
             [clojure.string :as str]
             #?(:cljs [asciinema.player.codepoint-polyfill])
-            #?(:clj [asciinema.vt-macros :refer [build-lookup-table]])
+            #?(:clj [asciinema.vt-macros :refer [build-lookup-table update!]])
             #?(:clj [clojure.core.match :refer [match]]
                :cljs [cljs.core.match :refer-macros [match]])
             #?(:cljs [asciinema.vt.screen :refer [Screen]]))
@@ -38,74 +38,75 @@
 (s/defn make-vt :- VT
   [width :- s/Num
    height :- s/Num]
-  (map->VT {:parser initial-parser
-            :screen (screen/blank-screen width height)}))
-
+  ;; (map->VT {:parser initial-parser
+  ;;           :screen (screen/blank-screen width height)}))
+  {:parser initial-parser
+   :screen (screen/blank-screen width height)})
 ;; helper functions
 
 (defn set-mode [vt intermediate param]
   (match [intermediate param]
-         [nil 4] (update vt :screen screen/enable-insert-mode)
-         [nil 20] (update vt :screen screen/enable-new-line-mode)
-         [0x3f 6] (update vt :screen #(-> % screen/enable-origin-mode screen/move-cursor-to-home))
-         [0x3f 7] (update vt :screen screen/enable-auto-wrap-mode)
-         [0x3f 25] (update vt :screen screen/show-cursor)
-         [0x3f 47] (update vt :screen screen/switch-to-alternate-buffer)
-         [0x3f 1047] (update vt :screen screen/switch-to-alternate-buffer)
-         [0x3f 1048] (update vt :screen screen/save-cursor)
-         [0x3f 1049] (update vt :screen #(-> % screen/save-cursor screen/switch-to-alternate-buffer))
+         [nil 4] (update! vt :screen screen/enable-insert-mode)
+         [nil 20] (update! vt :screen screen/enable-new-line-mode)
+         [0x3f 6] (update! vt :screen #(-> % screen/enable-origin-mode screen/move-cursor-to-home))
+         [0x3f 7] (update! vt :screen screen/enable-auto-wrap-mode)
+         [0x3f 25] (update! vt :screen screen/show-cursor)
+         [0x3f 47] (update! vt :screen screen/switch-to-alternate-buffer)
+         [0x3f 1047] (update! vt :screen screen/switch-to-alternate-buffer)
+         [0x3f 1048] (update! vt :screen screen/save-cursor)
+         [0x3f 1049] (update! vt :screen #(-> % screen/save-cursor screen/switch-to-alternate-buffer))
          :else vt))
 
 (defn reset-mode [vt intermediate param]
   (match [intermediate param]
-         [nil 4] (update vt :screen screen/disable-insert-mode)
-         [nil 20] (update vt :screen screen/disable-new-line-mode)
-         [0x3f 6] (update vt :screen #(-> % screen/disable-origin-mode screen/move-cursor-to-home))
-         [0x3f 7] (update vt :screen screen/disable-auto-wrap-mode)
-         [0x3f 25] (update vt :screen screen/hide-cursor)
-         [0x3f 47] (update vt :screen screen/switch-to-primary-buffer)
-         [0x3f 1047] (update vt :screen screen/switch-to-primary-buffer)
-         [0x3f 1048] (update vt :screen screen/restore-cursor)
-         [0x3f 1049] (update vt :screen #(-> % screen/switch-to-primary-buffer screen/restore-cursor))
+         [nil 4] (update! vt :screen screen/disable-insert-mode)
+         [nil 20] (update! vt :screen screen/disable-new-line-mode)
+         [0x3f 6] (update! vt :screen #(-> % screen/disable-origin-mode screen/move-cursor-to-home))
+         [0x3f 7] (update! vt :screen screen/disable-auto-wrap-mode)
+         [0x3f 25] (update! vt :screen screen/hide-cursor)
+         [0x3f 47] (update! vt :screen screen/switch-to-primary-buffer)
+         [0x3f 1047] (update! vt :screen screen/switch-to-primary-buffer)
+         [0x3f 1048] (update! vt :screen screen/restore-cursor)
+         [0x3f 1049] (update! vt :screen #(-> % screen/switch-to-primary-buffer screen/restore-cursor))
          :else vt))
 
 ;; control functions
 
 (defn execute-bs [vt]
-  (update vt :screen screen/move-cursor-left))
+  (update! vt :screen screen/move-cursor-left))
 
 (defn execute-ht [vt]
-  (update vt :screen screen/move-cursor-to-next-tab 1))
+  (update! vt :screen screen/move-cursor-to-next-tab 1))
 
 (defn execute-cr [vt]
-  (update vt :screen screen/move-cursor-to-col! 0))
+  (update! vt :screen screen/move-cursor-to-col! 0))
 
 (defn execute-lf [vt]
-  (update vt :screen screen/line-feed))
+  (update! vt :screen screen/line-feed))
 
 (defn execute-so [vt]
-  (update vt :screen screen/set-special-charset))
+  (update! vt :screen screen/set-special-charset))
 
 (defn execute-si [vt]
-  (update vt :screen screen/set-default-charset))
+  (update! vt :screen screen/set-default-charset))
 
 (defn execute-nel [vt]
-  (update vt :screen screen/new-line))
+  (update! vt :screen screen/new-line))
 
 (defn execute-hts [vt]
-  (update vt :screen screen/set-horizontal-tab))
+  (update! vt :screen screen/set-horizontal-tab))
 
 (defn execute-ri [vt]
-  (update vt :screen screen/reverse-index))
+  (update! vt :screen screen/reverse-index))
 
 (defn execute-decaln [vt]
-  (update vt :screen screen/test-pattern))
+  (update! vt :screen screen/test-pattern))
 
 (defn execute-sc [vt]
-  (update vt :screen screen/save-cursor))
+  (update! vt :screen screen/save-cursor))
 
 (defn execute-rc [vt]
-  (update vt :screen screen/restore-cursor))
+  (update! vt :screen screen/restore-cursor))
 
 (defn execute-ris [vt]
   (make-vt (-> vt :screen screen/width) (-> vt :screen screen/height)))
@@ -145,52 +146,52 @@
 
 (defn execute-ich [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/insert-characters n)))
+    (update! vt :screen screen/insert-characters n)))
 
 (defn execute-cuu [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/cursor-up n)))
+    (update! vt :screen screen/cursor-up n)))
 
 (defn execute-cud [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/cursor-down n)))
+    (update! vt :screen screen/cursor-down n)))
 
 (defn execute-cuf [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/cursor-forward n)))
+    (update! vt :screen screen/cursor-forward n)))
 
 (defn execute-cub [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/cursor-backward n)))
+    (update! vt :screen screen/cursor-backward n)))
 
 (defn execute-cnl [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen #(-> %
+    (update! vt :screen #(-> %
                             (screen/cursor-down n)
                             (screen/move-cursor-to-col! 0)))))
 
 (defn execute-cpl [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen #(-> %
+    (update! vt :screen #(-> %
                             (screen/cursor-up n)
                             (screen/move-cursor-to-col! 0)))))
 
 (defn execute-cha [vt]
   (let [x (dec (get-param vt 0 1))]
-    (update vt :screen screen/move-cursor-to-col x)))
+    (update! vt :screen screen/move-cursor-to-col x)))
 
 (defn execute-cup [vt]
   (let [y (dec (get-param vt 0 1))
         x (dec (get-param vt 1 1))]
-    (update vt :screen screen/move-cursor x y)))
+    (update! vt :screen screen/move-cursor x y)))
 
 (defn execute-cht [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/move-cursor-to-next-tab n)))
+    (update! vt :screen screen/move-cursor-to-next-tab n)))
 
 (defn execute-ed [vt]
   (let [n (get-param vt 0 0)]
-    (update vt :screen (case n
+    (update! vt :screen (case n
                          0 screen/clear-to-end-of-screen
                          1 screen/clear-to-beginning-of-screen
                          2 screen/clear-screen
@@ -198,7 +199,7 @@
 
 (defn execute-el [vt]
   (let [n (get-param vt 0 0)]
-    (update vt :screen (case n
+    (update! vt :screen (case n
                          0 screen/clear-to-end-of-line
                          1 screen/clear-to-beginning-of-line
                          2 screen/clear-line
@@ -206,45 +207,45 @@
 
 (defn execute-su [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/scroll-up n)))
+    (update! vt :screen screen/scroll-up n)))
 
 (defn execute-sd [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/scroll-down n)))
+    (update! vt :screen screen/scroll-down n)))
 
 (defn execute-il [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/insert-lines n)))
+    (update! vt :screen screen/insert-lines n)))
 
 (defn execute-dl [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/delete-lines n)))
+    (update! vt :screen screen/delete-lines n)))
 
 (defn execute-dch [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/delete-characters n)))
+    (update! vt :screen screen/delete-characters n)))
 
 (defn execute-ctc [vt]
   (let [n (get-param vt 0 0)]
     (case n
-      0 (update vt :screen screen/set-horizontal-tab)
-      2 (update vt :screen screen/clear-horizontal-tab)
-      5 (update vt :screen screen/clear-all-horizontal-tabs)
+      0 (update! vt :screen screen/set-horizontal-tab)
+      2 (update! vt :screen screen/clear-horizontal-tab)
+      5 (update! vt :screen screen/clear-all-horizontal-tabs)
       vt)))
 
 (defn execute-ech [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/erase-characters n)))
+    (update! vt :screen screen/erase-characters n)))
 
 (defn execute-cbt [vt]
   (let [n (get-param vt 0 1)]
-    (update vt :screen screen/move-cursor-to-prev-tab n)))
+    (update! vt :screen screen/move-cursor-to-prev-tab n)))
 
 (defn execute-tbc [vt]
   (let [n (get-param vt 0 0)]
     (case n
-      0 (update vt :screen screen/clear-horizontal-tab)
-      3 (update vt :screen screen/clear-all-horizontal-tabs)
+      0 (update! vt :screen screen/clear-horizontal-tab)
+      3 (update! vt :screen screen/clear-all-horizontal-tabs)
       vt)))
 
 (defn execute-sm [vt]
@@ -302,21 +303,21 @@
 
 (defn execute-sgr [vt]
   (let [params (or (seq (get-params vt)) [0])]
-    (update vt :screen execute-sgr* params)))
+    (update! vt :screen execute-sgr* params)))
 
 (defn execute-vpa [vt]
   (let [n (dec (get-param vt 0 1))]
-    (update vt :screen screen/move-cursor-to-row-within-margins n)))
+    (update! vt :screen screen/move-cursor-to-row-within-margins n)))
 
 (defn execute-decstr [vt]
   (if (= (get-intermediate vt 0) 0x21)
-    (update vt :screen screen/soft-reset)
+    (update! vt :screen screen/soft-reset)
     vt))
 
 (defn execute-decstbm [vt]
   (let [top (dec (get-param vt 0 1))
         bottom (some-> vt (get-param 1 nil) dec)]
-    (update vt :screen #(-> %
+    (update! vt :screen #(-> %
                             (screen/set-margins top bottom)
                             screen/move-cursor-to-home))))
 
@@ -326,7 +327,7 @@
   vt)
 
 (defn print [vt input]
-  (update vt :screen screen/print input))
+  (update! vt :screen screen/print input))
 
 (defn execute [vt input]
   (if-let [action (case input
@@ -343,17 +344,18 @@
                     0x88 execute-hts
                     0x8d execute-ri
                     nil)]
+    ;; (update! vt :screen action)
     (action vt)
     vt))
 
 (defn clear [vt input]
-  (update vt :parser assoc :intermediate-chars [] :param-chars []))
+  (update! vt :parser assoc :intermediate-chars [] :param-chars []))
 
 (defn collect [vt input]
-  (update-in vt [:parser :intermediate-chars] conj input))
+  (update! vt :parser update :intermediate-chars conj input))
 
 (defn param [vt input]
-  (update-in vt [:parser :param-chars] conj input))
+  (update! vt :parser update :param-chars conj input))
 
 (defn esc-dispatch [vt input]
   (match [(get-intermediate vt 0) input]
@@ -430,13 +432,13 @@
     (-> states current-state (get input))))
 
 (defn feed [vt inputs]
-  (loop [vt vt
+  (loop [vt (transient vt)
          parser-state (-> vt :parser :state)
          inputs inputs]
     (if-let [input (first inputs)]
       (let [[new-parser-state actions] (parse parser-state input)]
-          (recur (actions vt input) new-parser-state (rest inputs)))
-      (assoc-in vt [:parser :state] parser-state))))
+        (recur (actions vt input) new-parser-state (rest inputs)))
+      (persistent! (assoc! vt :parser (assoc (:parser vt) :state parser-state))))))
 
 (defn feed-one [vt input]
   (feed vt [input]))

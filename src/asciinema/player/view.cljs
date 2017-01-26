@@ -11,12 +11,12 @@
             [asciinema.player.fullscreen :as fullscreen])
   (:require-macros [cljs.core.async.macros :refer [go-loop]]))
 
-(extend-protocol screen/Screen
-  cljs.core/PersistentArrayMap
-  (lines [this]
-    (:lines this))
-  (cursor [this]
-    (:cursor this)))
+;; (extend-protocol screen/Screen
+;;   cljs.core/PersistentArrayMap
+;;   (lines [this]
+;;     (-> this :screen screen/lines))
+;;   (cursor [this]
+;;     (-> this :screen screen/cursor)))
 
 (defn send-value! [ch f]
   (fn [dom-event]

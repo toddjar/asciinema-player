@@ -30,6 +30,17 @@
    :frames (build-v1-frames asciicast)})
 
 (extend-protocol ps/Screen
+  ;; vt/VT
+  ;; (lines [this]
+  ;;   (-> this :screen screen/lines))
+  ;; (cursor [this]
+  ;;   (-> this :screen screen/cursor))
+  cljs.core/PersistentArrayMap
+  (lines [this]
+    (-> this :screen screen/lines))
+  (cursor [this]
+    (-> this :screen screen/cursor))
+
   vt/VT
   (lines [this]
     (-> this :screen screen/lines))

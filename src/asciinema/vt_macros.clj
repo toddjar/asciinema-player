@@ -139,3 +139,6 @@
 (defmacro build-lookup-table []
   (apply merge (for [state (keys states)]
                  {state (mapv (partial parse* state) (range 256))})))
+
+(defmacro update! [x key f & args]
+  `(assoc! ~x ~key (~f (~key ~x) ~@args)))
