@@ -320,7 +320,10 @@
           (swap! player-atom #(m/update-player message %)))
 
         (when (satisfies? m/ChannelSource message)
-          (swap! channels set/union (m/get-channels message @player-atom))))
+          (swap! channels set/union (m/get-channels message @player-atom)))
+
+        (reagent/flush))
+
       (recur))))
 
 (defn player* [player ui-ch mouse-moves-ch]

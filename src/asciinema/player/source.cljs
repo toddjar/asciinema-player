@@ -124,9 +124,10 @@
                wall-time (elapsed-time)]
           (if-let [[time data] (first coll)]
             (let [ahead (- time wall-time)]
-              (if (pos? ahead)
-                (let [timeout-ch (timeout (* 1000 ahead))]
-                  (<! timeout-ch)
+              (if true ;; (pos? ahead)
+                (let [] ;; timeout-ch (timeout (* 1000 ahead))]
+                  ;; (<! timeout-ch)
+                  (<! (timeout 0))
                   (when (>! out-ch data)
                     (recur (rest coll) (elapsed-time))))
                 (when (>! out-ch data)

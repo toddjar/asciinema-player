@@ -4,11 +4,16 @@
   :license {:name "GNU GPL v3"
             :url "http://www.gnu.org/licenses/gpl-3.0.txt"}
 
+  :exclusions [cljsjs/react cljsjs/react-dom cljsjs/react-dom-server]
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/clojurescript "1.9.293"]
                  [org.clojure/core.async "0.2.374"]
-                 [reagent "0.6.0"]
-                 [devcards "0.2.2" :exclusions [cljsjs/react]]
+                 ;; [reagent "0.6.0"]
+                 [reagent "0.6.1-SNAPSHOT"]
+                 [cljsjs/preact "7.1.0-0"]
+                 [cljsjs/preact-compat "3.9.4-0"]
+                 ;; [reagent "0.6.0" :exclusions [cljsjs/react #_cljsjs/react-dom #_cljsjs/react-dom-server]]
+                 ;; [devcards "0.2.2" :exclusions [cljsjs/react cljsjs/react-dom cljsjs/react-dom-server cljs-react-reload]]
                  [org.clojure/test.check "0.9.0"]
                  [org.clojure/core.match "0.3.0-alpha4"]
                  [prismatic/schema "1.1.3"]]
