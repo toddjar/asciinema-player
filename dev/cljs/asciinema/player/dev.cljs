@@ -1,6 +1,7 @@
 (ns asciinema.player.dev
   (:refer-clojure :exclude [compare])
   (:require [asciinema.player.core :as p]
+            [asciinema.player.giffer :as giffer]
             [asciinema.vt :as vt]
             [asciinema.vt.parser :as parser]
             [asciinema.player.util :as util]
@@ -42,9 +43,9 @@
 
 ;; v1 format
 
-(defonce player-state (p/make-player-ratom "/asciicasts/21195.json" options))
+;; (defonce player-state (p/make-player-ratom "/asciicasts/21195.json" options))
 ;; (defonce player-state (p/make-player-ratom "/asciicasts/20055.json" options))
-;; (defonce player-state (p/make-player-ratom "/asciicasts/frames-20055.json" options))
+(defonce player-state (p/make-player-ratom "/asciicasts/frames-20055.json" options))
 
 ;; v2 format (stream)
 
@@ -56,13 +57,13 @@
 ;; (swap! player-state assoc :speed 1)
 
 (defn reload []
-  (let [dom-node (. js/document (getElementById "player"))]
-    (p/mount-player-with-ratom player-state dom-node)))
+  )
+  ;; (let [dom-node (. js/document (getElementById "player"))]
+  ;;   (p/create-giffer dom-node "http" {})))
+
+    ;; #_(p/mount-player-with-ratom player-state dom-node)))
 
 ;; (reload)
-
-(defn start-dev []
-  (reload))
 
 (defn fetch-json [url]
   (let [ch (chan)]
@@ -73,6 +74,18 @@
                                  js/JSON.parse
                                  (js->clj :keywordize-keys true)))))
     ch))
+
+(defn start-dev []
+  (let [dom-node (. js/document (getElementById "player"))]
+    (go
+      (let [asciicast-filename "20055.json"
+            v1-url (str "/asciicasts/" asciicast-filename)
+            v1-json (<! (fetch-json v1-url))
+            v1-frames (v1/build-v1-frames v1-json)
+            forward (giffer/create-giffer dom-node v1-frames {})]
+        (set! (.-forward js/window) forward)))))
+
+  ;; (reload))
 
 (defn feed-verbose [vt str]
   (let [codes (map #(.charCodeAt % 0) str)]
